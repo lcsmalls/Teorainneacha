@@ -28,7 +28,7 @@ h1 {
   fill: #13385e;
   stroke: #95abc2;
   stroke-width: 0.075px;
-  transition: fill 0.45s ease, opacity 0.35s ease, transform 0.35s ease;
+  transition: fill 0.45s ease, transform 0.35s ease;
 }
 
 #map {
@@ -117,8 +117,8 @@ button:hover {
 }
 
 .revealed {
-  stroke: #fff;
-  stroke-width: 0.15px;
+  stroke: #95abc2;
+  stroke-width: 0.075px;
 }
 
 .capital-dot {

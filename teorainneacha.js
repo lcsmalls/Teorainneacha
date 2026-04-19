@@ -8,7 +8,7 @@ function revealCountry(rec) {
   let feature = getFeature(rec);
   if (!feature) {
     if (rec.cca3 === "BSC") {
-      const topoFeature = worldData.objects.countries.geometries.find(d => d.id === 686);
+      const topoFeature = worldData.objects.countries.geometries.find(d => d.properties && d.properties.name === "Somaliland");
       if (topoFeature) feature = {
         type: "Feature",
         geometry: topoFeature.geometry,
@@ -18,7 +18,7 @@ function revealCountry(rec) {
         }
       };
     } else if (rec.cca3 === "NCY") {
-      const topoFeature = worldData.objects.countries.geometries.find(d => d.id === 0);
+      const topoFeature = worldData.objects.countries.geometries.find(d => d.properties && d.properties.name === "N. Cyprus");
       if (topoFeature) feature = {
         type: "Feature",
         geometry: topoFeature.geometry,
@@ -45,6 +45,8 @@ function revealCountry(rec) {
   let flagImg = flagCache.get(rec.cca2);
 
   function brataiKey(name, cca3) {
+    if (cca3 === "BSC") return "somaliland";
+    if (cca3 === "NCY") return "turkish-cyprus";
     if (cca3 === "COD") return "democratic-republic-of-the-congo";
     if (cca3 === "GEO" || name.toLowerCase().includes('georgia')) return "georgia";
     if (cca3 === "JOR") return "jordan";
@@ -69,7 +71,7 @@ function revealCountry(rec) {
     // French Southern and Antarctic Lands (ATF) - keep as france for now
     return name.toLowerCase().replace(/['’]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
   }
-  let flagSrc = `https://teorainneacha.vercel.app/bratai/${brataiKey(rec.name, rec.cca3)}.svg`;
+  let flagSrc = `bratai/${rec.flagPath || brataiKey(rec.name, rec.cca3) + '.svg'}`;
   if (!flagImg) {
     flagImg = new Image();
     flagImg.src = flagSrc;
@@ -111,9 +113,11 @@ function revealCountry(rec) {
   }
 
   function placeImageCover(imgSel, naturalImg, bounds) {
+    if (!naturalImg || !naturalImg.width || !naturalImg.height) return;
     const flagRatio = naturalImg.width / naturalImg.height;
     const wBox = bounds[1][0] - bounds[0][0];
     const hBox = bounds[1][1] - bounds[0][1];
+    if (!isFinite(wBox) || !isFinite(hBox) || wBox <= 0 || hBox <= 0) return;
     let width, height;
     if (flagRatio > (wBox / hBox)) {
       height = hBox;
@@ -122,29 +126,47 @@ function revealCountry(rec) {
       width = wBox;
       height = width / flagRatio;
     }
+    if (!isFinite(width) || !isFinite(height) || width <= 0 || height <= 0) return;
     imgSel.attr("width", width).attr("height", height).attr("x", bounds[0][0] - (width - wBox) / 2).attr("y", bounds[0][1] - (height - hBox) / 2).attr("preserveAspectRatio", "xMidYMid slice");
   }
 
   function renderSingleFeature(feature, rec, clipId, stretchOverride = false) {
-    const bounds = path.bounds(feature);
+    let bounds = path.bounds(feature);
+    // Validate and sanitize bounds
+    if (!bounds || bounds.length !== 2 || 
+        !isFinite(bounds[0][0]) || !isFinite(bounds[0][1]) || 
+        !isFinite(bounds[1][0]) || !isFinite(bounds[1][1])) {
+      // Fallback: use reasonable default bounds if calculation fails
+      bounds = [[0, 0], [100, 100]];
+    }
     // Calculate the correct flag source for this specific rec
-    const recFlagSrc = `https://teorainneacha.vercel.app/bratai/${brataiKey(rec.name, rec.cca3)}.svg`;
-    const img = mapGroup.append("image").attr("href", recFlagSrc).attr("clip-path", `url(#${clipId})`).attr("style", "pointer-events:none;").attr("opacity", 0);
+    const recFlagSrc = `bratai/${rec.flagPath || brataiKey(rec.name, rec.cca3) + '.svg'}`;
+    const img = mapGroup.append("image")
+      .attr("id", `flag-${clipId}`)
+      .attr("href", recFlagSrc)
+      .attr("clip-path", `url(#${clipId})`)
+      .attr("style", "pointer-events:none;")
+      .attr("opacity", 0);
     const useStretch = forceStretch.has(rec.cca3) || stretchOverride;
 
     function applyStretch(imgSel, b) {
-      imgSel.attr("x", b[0][0]).attr("y", b[0][1]).attr("width", b[1][0] - b[0][0]).attr("height", b[1][1] - b[0][1]).attr("preserveAspectRatio", "none");
+      const w = b[1][0] - b[0][0];
+      const h = b[1][1] - b[0][1];
+      if (isFinite(w) && isFinite(h) && w > 0 && h > 0) {
+        imgSel.attr("x", b[0][0]).attr("y", b[0][1]).attr("width", w).attr("height", h).attr("preserveAspectRatio", "none");
+      }
     }
     if (flagImg && flagImg.complete && flagImg.naturalWidth) {
       if (useStretch) applyStretch(img, bounds);
       else placeImageCover(img, flagImg, bounds);
-      img.transition().duration(600).attr("opacity", 1);
     } else {
       const tmp = new Image();
       tmp.onload = function() {
         if (useStretch) applyStretch(img, bounds);
         else placeImageCover(img, tmp, bounds);
-        img.transition().duration(600).attr("opacity", 1);
+        if (img.classed("flag-transitioned")) {
+          img.attr("opacity", 1);
+        }
       };
       tmp.onerror = function() {
         d3.select(img.node()).remove();
@@ -299,13 +321,24 @@ function revealCountry(rec) {
     renderSingleFeature(feature, rec, clipId);
   }
   const iso = rec.cca3;
+  const normalizedRecName = rec.name.toLowerCase().replace(/[^a-z]+/g, '');
   const countrySel = mapGroup.selectAll("path.country").filter(d => {
     const props = d.properties || {};
-    return (props.iso_a3 === iso || props.ISO_A3 === iso || props.ADM0_A3 === iso);
+    const topoproperties = props.iso_a3 || props.ISO_A3 || props.ADM0_A3 || "";
+    if (topoproperties === iso) return true;
+    const propName = (props.name || props.NAME || props.ADMIN || "").toLowerCase().replace(/[^a-z]+/g, '');
+    return propName === normalizedRecName;
   });
-  countrySel.transition().duration(400).style("fill", "rgb(0,255,0)").style("opacity", 1);
-  mapGroup.select(`#flag-${iso}`).transition().delay(350).duration(450).style("opacity", 1);
+  countrySel.style("transition", "none").style("fill", "#00ff00").attr("opacity", 0).style("transition", "fill 0.45s ease, transform 0.35s ease");
+  countrySel.transition().duration(300).attr("opacity", 1);
+  const flagSel = mapGroup.selectAll(`[id^="flag-clip-${iso}"]`);
+  setTimeout(() => {
+    flagSel.transition().duration(300).attr("opacity", 1).on("start", function() {
+      d3.select(this).classed("flag-transitioned", true);
+    });
+  }, 200);
   countrySel.classed("revealed", true).raise();
+  flagSel.raise();
 }
 
 function nextRound() {

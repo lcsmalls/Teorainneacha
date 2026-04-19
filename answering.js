@@ -215,9 +215,21 @@ function submitAnswer() {
   }
   if (rawInput === "|ra") {
     if (gameType === "countries") {
-      countriesData.forEach(revealCountry);
+      countriesData.forEach(rec => {
+        try {
+          revealCountry(rec);
+        } catch (err) {
+          console.error('Error revealing country during |ra:', err, rec);
+        }
+      });
     } else {
-      capitalsOrder.forEach(revealCapital);
+      capitalsOrder.forEach(rec => {
+        try {
+          revealCapital(rec);
+        } catch (err) {
+          console.error('Error revealing capital during |ra:', err, rec);
+        }
+      });
     }
     endGame();
     return;

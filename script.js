@@ -23,11 +23,11 @@ let elapsed = 0;
 let timerInterval = null;
 let paused = false;
 const continentOrder = [
-  "Europe",
+  "Africa",
   "Oceania",
   "Americas",
   "Asia",
-  "Africa",
+  "Europe",
   "Antarctic",
 ];
 let noregdip = 0;
@@ -69,6 +69,7 @@ async function init() {
   topoIdMap = topoMapRes.ok ? await topoMapRes.json() : {};
   const rc = await rcRes.json();
   const topo = await topoRes.json();
+  const overrides = await loadTopoOverrides();
   const capitalsRaw = await capitalsRes.json();
   
   svg = d3.select("#map");
@@ -116,6 +117,7 @@ async function init() {
     if (iso) featureByCCA3.set(iso, f);
     if (pname) featureByName.set(normalizeName(pname), f);
   });
+  injectTopoOverrides(overrides, countriesData, nameIndex, features, featureByCCA3, featureByName);
   projection.fitSize([width, height], {
     type: "FeatureCollection",
     features: features,

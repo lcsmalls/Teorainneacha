@@ -1,0 +1,14 @@
+{
+  "Somaliland": {
+    "name": "Somaliland",
+    "flag": "somaliland.svg",
+    "region": "Africa",
+    "cca3": "BSC"
+  },
+  "N. Cyprus": {
+    "name": "Turkish Cyprus",
+    "flag": "turkish-cyprus.svg",
+    "region": "Asia",
+    "cca3": "NCY"
+  }
+}
