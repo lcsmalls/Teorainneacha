@@ -175,21 +175,60 @@ function revealCountry(rec) {
     }
   }
   
-  // Circle definition for Svalbard (center: 80°N, 20°E, radius: ~9 degrees)
-  const svalbardCircle = {
-    center: [20, 80],
-    radiusDegrees: 9
-  };
-  
-  function isPointInSvalbardCircle(lon, lat) {
-    const dx = lon - svalbardCircle.center[0];
-    const dy = lat - svalbardCircle.center[1];
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    return distance <= svalbardCircle.radiusDegrees;
-  }
-
-  function processMultiPolygon(feature, rec) {
+function processMultiPolygon(feature, rec) {
+    let svalbardIndex = null;
     let corsicaIndex = null;
+    if (rec.cca3 === "NOR") {
+      // Distance-based grouping (200km radius) with flood-fill using proper geo distance
+      const DISTANCE_KM = 200;
+      const EARTH_RADIUS_KM = 6371;
+      const polys = feature.geometry.coordinates;
+      
+      // Calculate centroids
+      const items = polys.map((poly, idx) => {
+        const lons = poly[0].map(p => p[0]);
+        const lats = poly[0].map(p => p[1]);
+        return { cx: d3.mean(lons), cy: d3.mean(lats), idx, grouped: false };
+      });
+      
+      // Distance in km using d3.geoDistance (returns radians, convert to km)
+      function isNearby(c1, c2) {
+        return d3.geoDistance([c1.cx, c1.cy], [c2.cx, c2.cy]) * EARTH_RADIUS_KM <= DISTANCE_KM;
+      }
+      
+      // Flood-fill clustering
+      const groups = [];
+      items.forEach(startItem => {
+        if (startItem.grouped) return;
+        const group = [startItem.idx];
+        startItem.grouped = true;
+        const queue = [startItem];
+        while (queue.length > 0) {
+          const current = queue.shift();
+          items.forEach(other => {
+            if (!other.grouped && isNearby(current, other)) {
+              group.push(other.idx);
+              other.grouped = true;
+              queue.push(other);
+            }
+          });
+        }
+        groups.push(group);
+      });
+      
+      // Render each group with Norway flag
+      groups.forEach((group, gIdx) => {
+        const groupFeature = {
+          type: "Feature",
+          geometry: { type: "MultiPolygon", coordinates: group.map(i => polys[i]) },
+          properties: feature.properties
+        };
+        const clipId = gIdx === 0 ? `clip-${rec.cca3}` : `clip-${rec.cca3}-group${gIdx}`;
+        mapGroup.append("clipPath").attr("id", clipId).append("path").attr("d", path(groupFeature));
+        renderSingleFeature(groupFeature, rec, clipId);
+      });
+      return;
+    }
     if (rec.cca3 === "FRA") {
       // Identify indices for Corsica and French overseas territories
       let territoryIndices = {};
@@ -266,79 +305,37 @@ function revealCountry(rec) {
       renderSingleFeature(singleFeature, rec, clipId);
     });
   }
-  if (rec.cca3 === "NOR" && feature.geometry.type === "MultiPolygon") {
-    // Separate Svalbard from Norway based on circle geometry
-    // Combine all Svalbard polygons into one feature and all Norway polygons into one feature
-    const svalbardPolygons = [];
-    const norwayPolygons = [];
-    
-    feature.geometry.coordinates.forEach((poly, idx) => {
-      const lons = poly[0].map(p => p[0]);
-      const lats = poly[0].map(p => p[1]);
-      const cx = d3.mean(lons), cy = d3.mean(lats);
-      
-      if (isPointInSvalbardCircle(cx, cy)) {
-        svalbardPolygons.push(poly);
-      } else {
-        norwayPolygons.push(poly);
-      }
-    });
-    
-    // Render Svalbard as a single feature
-    if (svalbardPolygons.length > 0) {
-      const svalbardFeature = {
-        type: "Feature",
-        geometry: {
-          type: svalbardPolygons.length === 1 ? "Polygon" : "MultiPolygon",
-          coordinates: svalbardPolygons.length === 1 ? svalbardPolygons[0] : svalbardPolygons
-        },
-        properties: feature.properties
-      };
-      const clipId = `clip-SJM`;
-      mapGroup.append("clipPath").attr("id", clipId).append("path").attr("d", path(svalbardFeature));
-      const customRec = { ...rec, cca3: "SJM", name: "Svalbard and Jan Mayen" };
-      renderSingleFeature(svalbardFeature, customRec, clipId);
-    }
-    
-    // Render Norway as a single feature
-    if (norwayPolygons.length > 0) {
-      const norwayFeature = {
-        type: "Feature",
-        geometry: {
-          type: norwayPolygons.length === 1 ? "Polygon" : "MultiPolygon",
-          coordinates: norwayPolygons.length === 1 ? norwayPolygons[0] : norwayPolygons
-        },
-        properties: feature.properties
-      };
-      const clipId = `clip-NOR`;
-      mapGroup.append("clipPath").attr("id", clipId).append("path").attr("d", path(norwayFeature));
-      renderSingleFeature(norwayFeature, rec, clipId);
-    }
-  } else if (["USA", "FRA", "NLD", "PRT", "ESP", "TWN", "MLT", "AUS", "NZL", "GNQ", "ZAF"].includes(rec.cca3) && feature.geometry.type === "MultiPolygon") processMultiPolygon(feature, rec);
+if (["USA", "FRA", "NLD", "PRT", "ESP", "TWN", "MLT", "AUS", "NZL", "GNQ", "ZAF", "NOR"].includes(rec.cca3) && feature.geometry.type === "MultiPolygon") processMultiPolygon(feature, rec);
   else {
     const clipId = `clip-${rec.cca3}`;
     mapGroup.append("clipPath").attr("id", clipId).append("path").attr("d", path(feature));
     renderSingleFeature(feature, rec, clipId);
   }
   const iso = rec.cca3;
-  const normalizedRecName = rec.name.toLowerCase().replace(/[^a-z]+/g, '');
-  const countrySel = mapGroup.selectAll("path.country").filter(d => {
-    const props = d.properties || {};
-    const topoproperties = props.iso_a3 || props.ISO_A3 || props.ADM0_A3 || "";
-    if (topoproperties === iso) return true;
-    const propName = (props.name || props.NAME || props.ADMIN || "").toLowerCase().replace(/[^a-z]+/g, '');
-    return propName === normalizedRecName;
+  const topoId = topoIdMap[iso];
+  const countrySel = mapGroup.selectAll("path.country").filter(function() {
+    const el = d3.select(this);
+    const dataCca3 = el.attr("data-cca3");
+    if (dataCca3 === iso) return true;
+    if (iso === "SJM" && dataCca3 === "578") return true;
+    const d = el.datum();
+    if (!d) return false;
+    const featureId = d.id ? String(d.id) : null;
+    if (featureId === iso || featureId === topoId) return true;
+    return false;
   });
-  countrySel.style("transition", "none").style("fill", "#00ff00").attr("opacity", 0).style("transition", "fill 0.45s ease, transform 0.35s ease");
-  countrySel.transition().duration(300).attr("opacity", 1);
-  const flagSel = mapGroup.selectAll(`[id^="flag-clip-${iso}"]`);
-  setTimeout(() => {
-    flagSel.transition().duration(300).attr("opacity", 1).on("start", function() {
-      d3.select(this).classed("flag-transitioned", true);
-    });
-  }, 200);
-  countrySel.classed("revealed", true).raise();
-  flagSel.raise();
+  // Only apply green if we found a matching path
+  if (countrySel.size() > 0) {
+    countrySel.style("transition", "none").style("fill", "#00ff00").style("opacity", 0).style("transition", "fill 0.45s ease, transform 0.35s ease");
+    countrySel.transition().duration(300).style("opacity", 1);
+    setTimeout(() => {
+      mapGroup.selectAll(`[id^="flag-clip-${iso}"]`).transition().duration(300).style("opacity", 1).on("start", function() {
+        d3.select(this).classed("flag-transitioned", true);
+      });
+    }, 300);
+    countrySel.classed("revealed", true);
+  }
+  mapGroup.selectAll(`[id^="flag-clip-${iso}"]`).raise();
 }
 
 function nextRound() {

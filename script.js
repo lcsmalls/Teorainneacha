@@ -23,11 +23,11 @@ let elapsed = 0;
 let timerInterval = null;
 let paused = false;
 const continentOrder = [
-  "Africa",
+  "Europe",
   "Oceania",
   "Americas",
   "Asia",
-  "Europe",
+  "Africa",
   "Antarctic",
 ];
 let noregdip = 0;

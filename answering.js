@@ -66,6 +66,8 @@ function getFeature(rec) {
   // Try feature properties for ISO code
   for (let f of features) {
     const props = f.properties || {};
+    const topoId = topoIdMap[rec.cca3];
+    if (topoId && (String(f.id) === topoId || f.id === topoId)) return f;
     if (props.iso_a3 === rec.cca3 || props.ISO_A3 === rec.cca3 || props.ADM0_A3 === rec.cca3) {
       return f;
     }

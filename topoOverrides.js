@@ -18,10 +18,10 @@ function injectTopoOverrides(overrides, countriesData, nameIndex, features, feat
       const override = overrides[name];
       const rec = {
         name: override.name,
-        cca2: override.flag.replace('.svg', ''), // Use flag name as cca2 for caching
+        cca2: override.flag.replace('.svg', ''),
         cca3: override.cca3,
         region: override.region,
-        flagPath: override.flag // Custom property for flag path
+        flagPath: override.flag
       };
       countriesData.push(rec);
       nameIndex.set(normalizeName(rec.name), rec);
