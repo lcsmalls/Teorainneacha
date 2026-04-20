@@ -8,25 +8,31 @@ function revealCountry(rec) {
   let feature = getFeature(rec);
   if (!feature) {
     if (rec.cca3 === "BSC") {
-      const topoFeature = worldData.objects.countries.geometries.find(d => d.properties && d.properties.name === "Somaliland");
-      if (topoFeature) feature = {
-        type: "Feature",
-        geometry: topoFeature.geometry,
-        properties: {
-          name: rec.name,
-          iso_a3: rec.cca3
-        }
-      };
+      const topoFeature = features.find(d => d.properties && d.properties.name === "Somaliland");
+      if (topoFeature) {
+        feature = {
+          id: "706",
+          type: "Feature",
+          geometry: topoFeature.geometry,
+          properties: {
+            name: rec.name,
+            iso_a3: rec.cca3
+          }
+        };
+      }
     } else if (rec.cca3 === "NCY") {
-      const topoFeature = worldData.objects.countries.geometries.find(d => d.properties && d.properties.name === "N. Cyprus");
-      if (topoFeature) feature = {
-        type: "Feature",
-        geometry: topoFeature.geometry,
-        properties: {
-          name: rec.name,
-          iso_a3: rec.cca3
-        }
-      };
+      const topoFeature = features.find(d => d.properties && d.properties.name === "N. Cyprus");
+      if (topoFeature) {
+        feature = {
+          id: "196",
+          type: "Feature",
+          geometry: topoFeature.geometry,
+          properties: {
+            name: rec.name,
+            iso_a3: rec.cca3
+          }
+        };
+      }
     }
     if (!feature) return;
   }
@@ -311,30 +317,31 @@ if (["USA", "FRA", "NLD", "PRT", "ESP", "TWN", "MLT", "AUS", "NZL", "GNQ", "ZAF"
     mapGroup.append("clipPath").attr("id", clipId).append("path").attr("d", path(feature));
     renderSingleFeature(feature, rec, clipId);
   }
-  const iso = rec.cca3;
-  const topoId = topoIdMap[iso];
-  const countrySel = mapGroup.selectAll("path.country").filter(function() {
-    const el = d3.select(this);
-    const dataCca3 = el.attr("data-cca3");
-    if (dataCca3 === iso) return true;
-    if (iso === "SJM" && dataCca3 === "578") return true;
-    const d = el.datum();
-    if (!d) return false;
-    const featureId = d.id ? String(d.id) : null;
-    if (featureId === iso || featureId === topoId) return true;
-    return false;
-  });
-  // Only apply green if we found a matching path
-  if (countrySel.size() > 0) {
-    countrySel.style("transition", "none").style("fill", "#00ff00").style("opacity", 0).style("transition", "fill 0.45s ease, transform 0.35s ease");
-    countrySel.transition().duration(300).style("opacity", 1);
-    setTimeout(() => {
-      mapGroup.selectAll(`[id^="flag-clip-${iso}"]`).transition().duration(300).style("opacity", 1).on("start", function() {
-        d3.select(this).classed("flag-transitioned", true);
-      });
-    }, 300);
-    countrySel.classed("revealed", true);
+const iso = rec.cca3;
+  const countrySel = mapGroup.selectAll("path.country");
+  let greenTarget = countrySel.filter(() => false);
+  
+  if (iso === "BSC" || iso === "NCY") {
+    // For BSC/NCY, apply green to ALL countries to test if anything works
+    greenTarget = countrySel;
+  } else {
+    const topoId = topoIdMap[iso];
+    greenTarget = countrySel.filter(function(d) {
+      if (!d) return false;
+      return String(d.id) === topoId || (d.properties || {}).iso_a3 === iso;
+    });
   }
+  
+  if (greenTarget.size() > 0) {
+    greenTarget.style("transition", "none").style("fill", "#00ff00").style("opacity", 0).style("transition", "fill 0.45s ease, transform 0.35s ease");
+    greenTarget.transition().duration(300).style("opacity", 1);
+    greenTarget.classed("revealed", true);
+  }
+  setTimeout(() => {
+    mapGroup.selectAll(`[id^="flag-clip-${iso}"]`).transition().duration(300).style("opacity", 1).on("start", function() {
+      d3.select(this).classed("flag-transitioned", true);
+    });
+  }, 300);
   mapGroup.selectAll(`[id^="flag-clip-${iso}"]`).raise();
 }
 
